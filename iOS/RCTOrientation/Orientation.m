@@ -13,6 +13,7 @@
 @synthesize bridge = _bridge;
 
 static UIInterfaceOrientationMask _orientation = UIInterfaceOrientationMaskAllButUpsideDown;
+static UIInterfaceOrientation _realOrientation = UIInterfaceOrientationUnknown;
 + (void)setOrientation: (UIInterfaceOrientationMask)orientation {
   _orientation = orientation;
 }
@@ -24,6 +25,20 @@ static UIInterfaceOrientationMask _orientation = UIInterfaceOrientationMaskAllBu
 {
   if ((self = [super init])) {
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(deviceOrientationDidChange:) name:@"UIDeviceOrientationDidChangeNotification" object:nil];
+      
+      _cm = [[CMMotionManager alloc] init];
+      _cm.deviceMotionUpdateInterval = 0.2f;
+      _cm.accelerometerUpdateInterval = 0.2f;
+      
+      [_cm startAccelerometerUpdatesToQueue:[NSOperationQueue currentQueue]
+                                withHandler:^(CMAccelerometerData  *accelerometerData, NSError *error) {
+                                    if (!error) {
+                                        [self outputAccelerationData:accelerometerData.acceleration];
+                                    }
+                                    else{
+                                        NSLog(@"%@", error);
+                                    }
+                                }];
   }
   return self;
 
@@ -32,6 +47,35 @@ static UIInterfaceOrientationMask _orientation = UIInterfaceOrientationMaskAllBu
 - (void)dealloc
 {
   [[NSNotificationCenter defaultCenter] removeObserver:self];
+    [_cm stopAccelerometerUpdates];
+}
+    
+- (void)outputAccelerationData:(CMAcceleration)acceleration{
+    UIInterfaceOrientation orientationNew;
+    
+    if (acceleration.x >= 0.75) {
+        orientationNew = UIInterfaceOrientationLandscapeLeft;
+    }
+    else if (acceleration.x <= -0.75) {
+        orientationNew = UIInterfaceOrientationLandscapeRight;
+    }
+    else if (acceleration.y <= -0.75) {
+        orientationNew = UIInterfaceOrientationPortrait;
+    }
+    else if (acceleration.y >= 0.75) {
+        orientationNew = UIInterfaceOrientationPortraitUpsideDown;
+    }
+    else {
+        return;
+    }
+    
+    if (_realOrientation == orientationNew) {
+        return;
+    }
+    
+    _realOrientation = orientationNew;
+    [self.bridge.eventDispatcher sendDeviceEventWithName:@"sensorOrientationChangeEvent"
+                                                    body:@{@"orientation": [self getOrientationStr:_realOrientation]}];
 }
 
 + (BOOL)requiresMainQueueSetup
@@ -57,9 +101,10 @@ static UIInterfaceOrientationMask _orientation = UIInterfaceOrientationMaskAllBu
       orientationStr = @"PORTRAIT";
       break;
     case UIDeviceOrientationLandscapeLeft:
+      orientationStr = @"LANDSCAPE-LEFT";
+      break;
     case UIDeviceOrientationLandscapeRight:
-
-      orientationStr = @"LANDSCAPE";
+      orientationStr = @"LANDSCAPE-RIGHT";
       break;
 
     case UIDeviceOrientationPortraitUpsideDown:
@@ -72,10 +117,11 @@ static UIInterfaceOrientationMask _orientation = UIInterfaceOrientationMaskAllBu
         case UIInterfaceOrientationPortrait:
           orientationStr = @"PORTRAIT";
           break;
-        case UIInterfaceOrientationLandscapeLeft:
-        case UIInterfaceOrientationLandscapeRight:
-
-          orientationStr = @"LANDSCAPE";
+        case UIDeviceOrientationLandscapeLeft:
+          orientationStr = @"LANDSCAPE-LEFT";
+          break;
+        case UIDeviceOrientationLandscapeRight:
+          orientationStr = @"LANDSCAPE-RIGHT";
           break;
 
         case UIInterfaceOrientationPortraitUpsideDown:
